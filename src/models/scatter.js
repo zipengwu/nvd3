@@ -466,33 +466,62 @@ nv.models.scatter = function() {
             {      
                 var titles =  groups.selectAll('.nv-label')
                     .data(function(d) {
-                        return d.values.map(
-                            function (point, pointIndex) {
-                                return [point, pointIndex]
-                            }).filter(
+                        return d.values
+                            .map(
+                                function (point, pointIndex) {
+                                    return [point, pointIndex]
+                                })
+                            .filter(
                                 function(pointArray, pointIndex) {
                                     return pointActive(pointArray[0], pointIndex)
                                 })
                         });
 
-                titles.enter().append('text')
-                    .style('fill', function (d,i) { 
-                        return d.color })
+                var transformFn = function(d, isPrevious){
+                    var dx, dy;
+                    if(isPrevious){
+                        dx = nv.utils.NaNtoZero(x0(getX(d[0],d[1])));
+                        dy = nv.utils.NaNtoZero(y0(getY(d[0],d[1])));
+                    }
+                    else {
+                        dx = nv.utils.NaNtoZero(x(getX(d[0],d[1])));
+                        dy = nv.utils.NaNtoZero(y(getY(d[0],d[1])));
+                    }
+                    return 'translate(' + dx + ',' + dy + ')';
+                };
+
+                var lableGroup = titles.enter()
+                    .append('g')
+                    .attr('transform', function(d) {
+                        return transformFn(d, true);
+                    });
+
+                var lineLength = 24;//two default fontsize
+
+                lableGroup.append('text')
+                    .style('fill', function (d) { return d.color })
                     .style('stroke-opacity', 0)
                     .style('fill-opacity', 1)
-                    .attr('transform', function(d) {
-                        var dx = nv.utils.NaNtoZero(x0(getX(d[0],d[1]))) + Math.sqrt(z(getSize(d[0],d[1]))/Math.PI) + 2;
-                        return 'translate(' + dx + ',' + nv.utils.NaNtoZero(y0(getY(d[0],d[1]))) + ')';
-                    })
-                    .text(function(d,i){
-                        return d[0].label;});
+                    .text(function(d){ return d[0].label })
+                    .attr('transform', function(d){
+                        var offset = -this.textLength.baseVal.value/2;
+                        return 'translate('+offset+','+(-lineLength)+')';
+                    });
+
+                lableGroup.append('line')
+                    .attr('x1', 0)
+                    .attr('y1', -lineLength)
+                    .attr('x2', 0)
+                    .attr('y2', 0)
+                    .style('stroke', 'white')
+                    .style('stroke-width', 2)
+
 
                 titles.exit().remove();
-                groups.exit().selectAll('path.nv-label')
+                groups.exit().selectAll('g.nv-label')
                     .watchTransition(renderWatch, 'scatter exit')
                     .attr('transform', function(d) {
-                        var dx = nv.utils.NaNtoZero(x(getX(d[0],d[1])))+ Math.sqrt(z(getSize(d[0],d[1]))/Math.PI)+2;
-                        return 'translate(' + dx + ',' + nv.utils.NaNtoZero(y(getY(d[0],d[1]))) + ')';
+                        return transformFn(d);
                     })
                     .remove();
                titles.each(function(d) {
@@ -503,8 +532,7 @@ nv.models.scatter = function() {
                 });
                 titles.watchTransition(renderWatch, 'scatter labels')
                     .attr('transform', function(d) {
-                        var dx = nv.utils.NaNtoZero(x(getX(d[0],d[1])))+ Math.sqrt(z(getSize(d[0],d[1]))/Math.PI)+2;
-                        return 'translate(' + dx + ',' + nv.utils.NaNtoZero(y(getY(d[0],d[1]))) + ')'
+                        return transformFn(d);
                     });
             }
 
