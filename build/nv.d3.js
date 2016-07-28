@@ -1,4 +1,4 @@
-/* nvd3 version 1.8.4-dev (https://github.com/novus/nvd3) 2016-07-03 */
+/* nvd3 version 1.8.4-dev (https://github.com/novus/nvd3) 2016-07-28 */
 (function(){
 
 // set up main nv object
@@ -6111,7 +6111,10 @@ nv.models.legend = function() {
             var gEnter = wrap.enter().append('g').attr('class', 'nvd3 nv-legend').append('g');
             var g = wrap.select('g');
 
-            wrap.attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+            if (rightAlign)
+                wrap.attr('transform', 'translate(' - margin.right + ',' + margin.top + ')');
+            else
+                wrap.attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
             var series = g.selectAll('.nv-series')
                 .data(function(d) {
@@ -6488,6 +6491,7 @@ nv.models.line = function() {
     scatter
         .pointSize(16) // default size
         .pointDomain([16,256]) //set to speed up calculation, needs to be unset if there is a custom size accessor
+        .showLabels(true)
     ;
 
     //============================================================
@@ -9565,7 +9569,8 @@ nv.models.multiChart = function() {
         useVoronoi = true,
         interactiveLayer = nv.interactiveGuideline(),
         useInteractiveGuideline = false,
-        legendRightAxisHint = ' (right axis)'
+        legendRightAxisHint = ' (right axis)',
+        duration = 250
         ;
 
     //============================================================
@@ -9576,21 +9581,21 @@ nv.models.multiChart = function() {
         yScale1 = d3.scale.linear(),
         yScale2 = d3.scale.linear(),
 
-        lines1 = nv.models.line().yScale(yScale1),
-        lines2 = nv.models.line().yScale(yScale2),
+        lines1 = nv.models.line().yScale(yScale1).duration(duration),
+        lines2 = nv.models.line().yScale(yScale2).duration(duration),
 
-        scatters1 = nv.models.scatter().yScale(yScale1),
-        scatters2 = nv.models.scatter().yScale(yScale2),
+        scatters1 = nv.models.scatter().yScale(yScale1).duration(duration),
+        scatters2 = nv.models.scatter().yScale(yScale2).duration(duration),
 
-        bars1 = nv.models.multiBar().stacked(false).yScale(yScale1),
-        bars2 = nv.models.multiBar().stacked(false).yScale(yScale2),
+        bars1 = nv.models.multiBar().stacked(false).yScale(yScale1).duration(duration),
+        bars2 = nv.models.multiBar().stacked(false).yScale(yScale2).duration(duration),
 
-        stack1 = nv.models.stackedArea().yScale(yScale1),
-        stack2 = nv.models.stackedArea().yScale(yScale2),
+        stack1 = nv.models.stackedArea().yScale(yScale1).duration(duration),
+        stack2 = nv.models.stackedArea().yScale(yScale2).duration(duration),
 
-        xAxis = nv.models.axis().scale(x).orient('bottom').tickPadding(5),
-        yAxis1 = nv.models.axis().scale(yScale1).orient('left'),
-        yAxis2 = nv.models.axis().scale(yScale2).orient('right'),
+        xAxis = nv.models.axis().scale(x).orient('bottom').tickPadding(5).duration(duration),
+        yAxis1 = nv.models.axis().scale(yScale1).orient('left').duration(duration),
+        yAxis2 = nv.models.axis().scale(yScale2).orient('right').duration(duration),
 
         legend = nv.models.legend().height(30),
         tooltip = nv.models.tooltip(),
@@ -10123,6 +10128,13 @@ nv.models.multiChart = function() {
                 scatters1.interactive(false);
                 scatters2.interactive(false);
             }
+        }},
+
+        duration: {get: function(){return duration;}, set: function(_) {
+            duration = _;
+            [lines1, lines2, stack1, stack2, scatters1, scatters2, xAxis, yAxis1, yAxis2].forEach(function(model){
+              model.duration(duration);
+            });
         }}
     });
 
@@ -10507,6 +10519,7 @@ nv.models.parallelCoordinates = function() {
             //Add missing value line at the bottom of the chart
             var missingValuesline, missingValueslineText;
             var step = x.range()[1] - x.range()[0];
+            step = isNaN(step) ? x.range()[0] : step;
             if (!isNaN(step)) {
                 var lineData = [0 + step / 2, availableHeight - 12, availableWidth - step / 2, availableHeight - 12];
                 missingValuesline = wrap.select('.missingValuesline').selectAll('line').data([lineData]);
@@ -12009,11 +12022,12 @@ nv.models.scatter = function() {
 
             defsEnter.append('clipPath')
                 .attr('id', 'nv-edge-clip-' + id)
-                .append('rect');
-
+                .append('rect')
+                .attr('transform', 'translate( -10, -10)');
+                
             wrap.select('#nv-edge-clip-' + id + ' rect')
-                .attr('width', availableWidth)
-                .attr('height', (availableHeight > 0) ? availableHeight : 0);
+                .attr('width', availableWidth + 20)
+                .attr('height', (availableHeight > 0) ? availableHeight + 20 : 0);
 
             g.attr('clip-path', clipEdge ? 'url(#nv-edge-clip-' + id + ')' : '');
 
@@ -12297,33 +12311,62 @@ nv.models.scatter = function() {
             {      
                 var titles =  groups.selectAll('.nv-label')
                     .data(function(d) {
-                        return d.values.map(
-                            function (point, pointIndex) {
-                                return [point, pointIndex]
-                            }).filter(
+                        return d.values
+                            .map(
+                                function (point, pointIndex) {
+                                    return [point, pointIndex]
+                                })
+                            .filter(
                                 function(pointArray, pointIndex) {
                                     return pointActive(pointArray[0], pointIndex)
                                 })
                         });
 
-                titles.enter().append('text')
-                    .style('fill', function (d,i) { 
-                        return d.color })
+                var transformFn = function(d, isPrevious){
+                    var dx, dy;
+                    if(isPrevious){
+                        dx = nv.utils.NaNtoZero(x0(getX(d[0],d[1])));
+                        dy = nv.utils.NaNtoZero(y0(getY(d[0],d[1])));
+                    }
+                    else {
+                        dx = nv.utils.NaNtoZero(x(getX(d[0],d[1])));
+                        dy = nv.utils.NaNtoZero(y(getY(d[0],d[1])));
+                    }
+                    return 'translate(' + dx + ',' + dy + ')';
+                };
+
+                var lableGroup = titles.enter()
+                    .append('g')
+                    .attr('transform', function(d) {
+                        return transformFn(d, true);
+                    });
+
+                var lineLength = 24;//two default fontsize
+
+                lableGroup.append('text')
+                    .style('fill', function (d) { return d.color })
                     .style('stroke-opacity', 0)
                     .style('fill-opacity', 1)
-                    .attr('transform', function(d) {
-                        var dx = nv.utils.NaNtoZero(x0(getX(d[0],d[1]))) + Math.sqrt(z(getSize(d[0],d[1]))/Math.PI) + 2;
-                        return 'translate(' + dx + ',' + nv.utils.NaNtoZero(y0(getY(d[0],d[1]))) + ')';
-                    })
-                    .text(function(d,i){
-                        return d[0].label;});
+                    .text(function(d){ return d[0].label })
+                    .attr('transform', function(d){
+                        var offset = -this.textLength.baseVal.value/2;
+                        return 'translate('+offset+','+(-lineLength)+')';
+                    });
+
+                lableGroup.append('line')
+                    .attr('x1', 0)
+                    .attr('y1', -lineLength)
+                    .attr('x2', 0)
+                    .attr('y2', 0)
+                    .style('stroke', 'white')
+                    .style('stroke-width', 2)
+
 
                 titles.exit().remove();
-                groups.exit().selectAll('path.nv-label')
+                groups.exit().selectAll('g.nv-label')
                     .watchTransition(renderWatch, 'scatter exit')
                     .attr('transform', function(d) {
-                        var dx = nv.utils.NaNtoZero(x(getX(d[0],d[1])))+ Math.sqrt(z(getSize(d[0],d[1]))/Math.PI)+2;
-                        return 'translate(' + dx + ',' + nv.utils.NaNtoZero(y(getY(d[0],d[1]))) + ')';
+                        return transformFn(d);
                     })
                     .remove();
                titles.each(function(d) {
@@ -12334,8 +12377,7 @@ nv.models.scatter = function() {
                 });
                 titles.watchTransition(renderWatch, 'scatter labels')
                     .attr('transform', function(d) {
-                        var dx = nv.utils.NaNtoZero(x(getX(d[0],d[1])))+ Math.sqrt(z(getSize(d[0],d[1]))/Math.PI)+2;
-                        return 'translate(' + dx + ',' + nv.utils.NaNtoZero(y(getY(d[0],d[1]))) + ')'
+                        return transformFn(d);
                     });
             }
 
@@ -13233,6 +13275,7 @@ nv.models.stackedArea = function() {
     scatter
         .pointSize(2.2) // default size
         .pointDomain([2.2, 2.2]) // all the same size by default
+        .showLabels(true)
     ;
 
     /************************************
@@ -13550,12 +13593,13 @@ nv.models.stackedAreaChart = function() {
         , focus = nv.models.focus(nv.models.stackedArea())
         ;
 
-    var margin = {top: 30, right: 25, bottom: 50, left: 60}
+    var margin = {top: 10, right: 25, bottom: 50, left: 60}
         , width = null
         , height = null
         , color = nv.utils.defaultColor()
         , showControls = true
         , showLegend = true
+        , legendPosition = 'top'
         , showXAxis = true
         , showYAxis = true
         , rightAlignYAxis = false
@@ -13699,18 +13743,28 @@ nv.models.stackedAreaChart = function() {
             if (!showLegend) {
                 g.select('.nv-legendWrap').selectAll('*').remove();
             } else {
-                var legendWidth = (showControls) ? availableWidth - controlWidth : availableWidth;
+                var legendWidth = (showControls && legendPosition === 'top') ? availableWidth - controlWidth : availableWidth;
 
                 legend.width(legendWidth);
                 g.select('.nv-legendWrap').datum(data).call(legend);
+                
+                if (legendPosition === 'bottom') {
+                	// constant from axis.js, plus some margin for better layout
+                	var xAxisHeight = (showXAxis ? 12 : 0) + 10;
+                   	margin.bottom = Math.max(legend.height() + xAxisHeight, margin.bottom);
+                   	availableHeight = nv.utils.availableHeight(height, container, margin) - (focusEnable ? focus.height() : 0);
+                	var legendTop = availableHeight + xAxisHeight;
+                    g.select('.nv-legendWrap')
+                        .attr('transform', 'translate(0,' + legendTop +')');
+                } else if (legendPosition === 'top') {
+                    if ( margin.top != legend.height()) {
+                        margin.top = legend.height();
+                        availableHeight = nv.utils.availableHeight(height, container, margin) - (focusEnable ? focus.height() : 0);
+                    }
 
-                if (legend.height() > margin.top) {
-                    margin.top = legend.height();
-                    availableHeight = nv.utils.availableHeight(height, container, margin) - (focusEnable ? focus.height() : 0);
+                    g.select('.nv-legendWrap')
+                    	.attr('transform', 'translate(' + (availableWidth-legendWidth) + ',' + (-margin.top) +')');
                 }
-
-                g.select('.nv-legendWrap')
-                    .attr('transform', 'translate(' + (availableWidth-legendWidth) + ',' + (-margin.top) +')');
             }
 
             // Controls
@@ -13756,16 +13810,18 @@ nv.models.stackedAreaChart = function() {
                 g.select('.nv-controlsWrap')
                     .datum(controlsData)
                     .call(controls);
+                
+                var requiredTop = Math.max(controls.height(), showLegend && (legendPosition === 'top') ? legend.height() : 0);
 
-                if (Math.max(controls.height(), legend.height()) > margin.top) {
-                    margin.top = Math.max(controls.height(), legend.height());
-                    availableHeight = nv.utils.availableHeight(height, container, margin);
+                if ( margin.top != requiredTop ) {
+                    margin.top = requiredTop;
+                    availableHeight = nv.utils.availableHeight(height, container, margin) - (focusEnable ? focus.height() : 0);
                 }
 
                 g.select('.nv-controlsWrap')
                     .attr('transform', 'translate(0,' + (-margin.top) +')');
             }
-
+            
             wrap.attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
             if (rightAlignYAxis) {
@@ -14117,6 +14173,7 @@ nv.models.stackedAreaChart = function() {
         width:      {get: function(){return width;}, set: function(_){width=_;}},
         height:     {get: function(){return height;}, set: function(_){height=_;}},
         showLegend: {get: function(){return showLegend;}, set: function(_){showLegend=_;}},
+        legendPosition: {get: function(){return legendPosition;}, set: function(_){legendPosition=_;}},
         showXAxis:      {get: function(){return showXAxis;}, set: function(_){showXAxis=_;}},
         showYAxis:    {get: function(){return showYAxis;}, set: function(_){showYAxis=_;}},
         defaultState:    {get: function(){return defaultState;}, set: function(_){defaultState=_;}},
