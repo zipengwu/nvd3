@@ -490,15 +490,19 @@ nv.models.scatter = function() {
                     return 'translate(' + dx + ',' + dy + ')';
                 };
 
-                var lableGroup = titles.enter()
+                var labelGroup = titles
+                    .enter()
                     .append('g')
+                    .filter(function (d) {
+                        return !!d[0].label;
+                    })
                     .attr('transform', function(d) {
                         return transformFn(d, true);
                     });
 
                 var lineLength = 24;//two default fontsize
 
-                lableGroup.append('text')
+                labelGroup.append('text')
                     .style('fill', function (d) { return d.color })
                     .style('stroke-opacity', 0)
                     .style('fill-opacity', 1)
@@ -508,7 +512,7 @@ nv.models.scatter = function() {
                         return 'translate('+offset+','+(-lineLength)+')';
                     });
 
-                lableGroup.append('line')
+                labelGroup.append('line')
                     .attr('x1', 0)
                     .attr('y1', -lineLength)
                     .attr('x2', 0)
